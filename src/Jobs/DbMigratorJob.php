@@ -30,7 +30,7 @@ class DbMigratorJob implements ShouldQueue
     public function handle(): void
     {
         $dbMigration = $this->dbMigration;
-        $migrateClass = new ReflectionClass($dbMigration->migration);
+        $migrateClass = new ReflectionClass($dbMigration->migrate);
         $migrator = $migrateClass->newInstance();
 
         try {

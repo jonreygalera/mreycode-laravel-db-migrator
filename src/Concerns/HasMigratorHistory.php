@@ -2,62 +2,76 @@
 
 namespace Mreycode\DbMigrator\Concerns;
 
-use Mreycode\DbMigrator\Models\MigrationDb;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Mreycode\DbMigrator\Models\MigratorHistory;
 
 trait HasMigratorHistory
 {
-    public $migrationDbSourceName = null;
-    public $migrationDbMigrationTableName = null;
+    public $migratorSourceName = null;
+    public $dbMigratorName = null;
     
-    public function migrationDb($sourceData, $sourceId, $pk = 'id')
+    public function recordMigrationMapping(Collection|array $sourceData, $sourceId, $targetId = 'id')
     {
-        $sourceName = $this->getMigrationDbSourceName();
-        $migrationTableName = $this->getMigrationDbMigrationTableName();
+        $sourceName = $this->getMigratorSourceName();
+        $migratorName = $this->getMigratorName();
 
-        $forMigrationDb = $sourceData->map(function($item) use($sourceName, $migrationTableName, $sourceId, $pk) {
+        $forMigrationDb = collect($sourceData)->map(function($item) use($sourceName, $migratorName, $sourceId, $targetId) {
             return [
+                'id' => Str::uuid(),
                 'source_name' => $sourceName,
                 'source_id' => $item[$sourceId],
-                'pk_id' => $item[$pk],
-                'migration_table_name' => $migrationTableName,
+                'target_id' => $item[$targetId],
+                'migrator_name' => $migratorName,
             ];
         });
 
-        MigrationDb::upsert($forMigrationDb->toArray(), ['source_name', 'migration_table_name', 'source_id'], ['pk_id']);
+       $this->storeMigratorHistory($forMigrationDb);
 
         return $sourceData->map(function($item) use($sourceId) {
             return collect($item)->except([$sourceId])->toArray();
         });
     }
 
-    public function getMigrationDbSource()
+    public function storeMigratorHistory(Collection|array $migratorData): void
     {
-        $sourceName = $this->getMigrationDbSourceName();
-        $migrationTableName = $this->getMigrationDbMigrationTableName();
-
-        return MigrationDb::where('source_name', $sourceName)
-            ->where('migration_table_name', $migrationTableName);
+        collect($migratorData)->chunk(1000)->each(fn (Collection $chunk) => 
+            MigratorHistory::upsert(
+                $chunk->toArray(),
+                ['source_name', 'migrator_name', 'source_id'],
+                ['target_id']
+            )
+        );
     }
 
-    public function getMigrationDb(array $sourceIds)
+    public function getMigratorDbSource()
     {
-        return $this->getMigrationDbSource()
+        $sourceName = $this->getMigratorSourceName();
+        $migratorName = $this->getMigratorName();
+
+        return MigratorHistory::where('source_name', $sourceName)
+            ->where('migrator_name', $migratorName);
+    }
+
+    public function getMigratorHistoryBySource(array $sourceIds)
+    {
+        return $this->getMigratorDbSource()
             ->whereIn('source_id', $sourceIds)
             ->get();
     }
 
     public function countMigrated()
     {
-        return $this->getMigrationDbSource()->count();
+        return $this->getMigratorDbSource()->count();
     }
 
-    public function getMigrationDbSourceName()
+    public function getMigratorSourceName()
     {
-        return $this->migrationDbSourceName ?? static::class;
+        return $this->migratorSourceName ?? static::class;
     }
 
-    public function getMigrationDbMigrationTableName()
+    public function getMigratorName()
     {
-        return $this->migrationDbMigrationTableName ?? static::class;
+        return $this->dbMigratorName ?? static::class;
     }
 }

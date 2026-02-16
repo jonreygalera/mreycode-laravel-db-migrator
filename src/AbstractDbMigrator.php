@@ -232,7 +232,7 @@ abstract class AbstractDbMigrator
         return [];
     }
 
-    public function getSourceConnetion()
+    public function getSourceConnection()
     {
         return static::$sourceConnection ?? null;
     }
