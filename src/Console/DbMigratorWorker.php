@@ -64,7 +64,7 @@ class DbMigratorWorker extends Command
              * Process job
              */
             try {
-                $this->info("[" . now() . "(" . $jobMigrate->migration . ")] Processing job");
+                $this->info("[" . now() . "(" . $jobMigrate->migrate . ")] Processing job");
                 DbMigratorJob::dispatch($jobMigrate)
                     ->delay(now()
                     ->addSeconds($jobDelaySeconds));

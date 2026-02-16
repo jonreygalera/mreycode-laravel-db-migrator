@@ -166,7 +166,6 @@ php artisan mreycode:db-worker --max-jobs=500 --memory=1024
 | Key                   | Default   | Description                                                                  |
 | :-------------------- | :-------- | :--------------------------------------------------------------------------- |
 | `sequence`            | `[]`      | Critical: Defines the order of execution to satisfy foreign key constraints. |
-| `source_connection`   | `db_test` | The default connection string for the legacy database.                       |
 | `monitoring.interval` | `30`      | Seconds between refreshes for the continuous stats watcher.                  |
 | `worker.delay`        | `5`       | Seconds to wait between job dispatches.                                      |
 | `worker.sleep`        | `3`       | Seconds to sleep when no pending migrations are found.                       |

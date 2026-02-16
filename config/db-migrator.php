@@ -16,17 +16,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Database Connection - OPTIONAL
-    |--------------------------------------------------------------------------
-    |
-    | Specify the default database connection name for your database source.
-    | This can be overridden within individual migrator classes.
-    |
-    */
-
-    'source_connection' => env('DB_MIGRATOR_SOURCE_CONNECTION', 'db_test'),
-    /*
-    |--------------------------------------------------------------------------
     | Monitoring Settings
     |--------------------------------------------------------------------------
     |

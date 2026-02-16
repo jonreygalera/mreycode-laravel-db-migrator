@@ -1,74 +1,73 @@
 {
-    "name": "mreycode/laravel-db-migrator",
-    "description": "A production-grade Laravel package for complex, large-scale database migrations with resumable, monitored, and batch-aware processing.",
-    "version": "v1.0.0",
-    "type": "library",
-    "license": "MIT",
-    "authors": [
-        {
-            "name": "Jon Rey Galera",
-            "email": "jonreygalera@gmail.com",
-            "role": "Developer"
-        }
-    ],
-    "require": {
-        "php": "^8.2",
-        "illuminate/bus": "^11.0|^12.0",
-        "illuminate/console": "^11.0|^12.0",
-        "illuminate/database": "^11.0|^12.0",
-        "illuminate/support": "^11.0|^12.0"
-    },
-    "require-dev": {
-        "laravel/pint": "^1.14",
-        "mockery/mockery": "^1.6",
-        "orchestra/testbench": "^9.0|^10.0",
-        "pestphp/pest": "^2.34|^3.0",
-        "pestphp/pest-plugin-laravel": "^2.3|^3.0",
-        "phpstan/phpstan": "^1.10"
-    },
-    "autoload": {
-        "psr-4": {
-            "Mreycode\\DbMigrator\\": "src/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "Mreycode\\DbMigrator\\Tests\\": "tests/"
-        }
-    },
-    "scripts": {
-        "test": "vendor/bin/pest",
-        "test-coverage": "vendor/bin/pest --coverage",
-        "format": "vendor/bin/pint",
-        "analyse": "vendor/bin/phpstan analyse"
-    },
-    "extra": {
-        "laravel": {
-            "providers": [
-                "Mreycode\\DbMigrator\\DbMigratorServiceProvider"
-            ]
-        }
-    },
-    "config": {
-        "sort-packages": true,
-        "allow-plugins": {
-            "pestphp/pest-plugin": true,
-            "php-http/discovery": true
-        }
-    },
-    "keywords": [
-        "laravel",
-        "migration",
-        "database",
-        "batch-processing",
-        "resumable",
-        "queue",
-        "worker"
-    ],
-    "support": {
-        "issues": "https://github.com/jonreygalera/mreycode-db-migrator/issues",
-        "source": "https://github.com/jonreygalera/mreycode-db-migrator"
-    },
-    "minimum-stability": "dev",
-    "prefer-stable": true
+  "name": "mreycode/laravel-db-migrator",
+  "description": "A production-grade Laravel package for complex, large-scale database migrations with resumable, monitored, and batch-aware processing.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Jon Rey Galera",
+      "email": "jonreygalera@gmail.com",
+      "role": "Developer"
+    }
+  ],
+  "require": {
+    "php": "^8.2",
+    "illuminate/bus": "^11.0|^12.0",
+    "illuminate/console": "^11.0|^12.0",
+    "illuminate/database": "^11.0|^12.0",
+    "illuminate/support": "^11.0|^12.0"
+  },
+  "require-dev": {
+    "laravel/pint": "^1.14",
+    "mockery/mockery": "^1.6",
+    "orchestra/testbench": "^9.0|^10.0",
+    "pestphp/pest": "^2.34|^3.0",
+    "pestphp/pest-plugin-laravel": "^2.3|^3.0",
+    "phpstan/phpstan": "^1.10"
+  },
+  "autoload": {
+    "psr-4": {
+      "Mreycode\\DbMigrator\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Mreycode\\DbMigrator\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "test": "vendor/bin/pest",
+    "test-coverage": "vendor/bin/pest --coverage",
+    "format": "vendor/bin/pint",
+    "analyse": "vendor/bin/phpstan analyse"
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Mreycode\\DbMigrator\\DbMigratorServiceProvider"
+      ]
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "pestphp/pest-plugin": true,
+      "php-http/discovery": true
+    }
+  },
+  "keywords": [
+    "laravel",
+    "migration",
+    "database",
+    "batch-processing",
+    "resumable",
+    "queue",
+    "worker"
+  ],
+  "support": {
+    "issues": "https://github.com/jonreygalera/mreycode-db-migrator/issues",
+    "source": "https://github.com/jonreygalera/mreycode-db-migrator"
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
 }

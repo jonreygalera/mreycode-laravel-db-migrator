@@ -7,7 +7,7 @@ use Mreycode\DbMigrator\Enums\MigratorStatus;
 
 class DbMigratorDto implements Arrayable
 {
-    public string $migration;
+    public string $migrate;
     public MigratorStatus $status;
     public int $batch;
     public ?string $message;
@@ -18,7 +18,7 @@ class DbMigratorDto implements Arrayable
     public ?int $id = null;
 
     public function __construct(
-        string $migration,
+        string $migrate,
         MigratorStatus $status,
         int $batch,
         ?string $message = null,
@@ -27,7 +27,7 @@ class DbMigratorDto implements Arrayable
         ?string $updatedAt = null,
         ?int $id = null
     ) {
-        $this->migration = $migration;
+        $this->migrate = $migrate;
         $this->status = $status;
         $this->batch = $batch;
         $this->message = $message;
@@ -44,7 +44,7 @@ class DbMigratorDto implements Arrayable
     {
         return [
             'id' => $this->id,
-            'migration' => $this->migration,
+            'migrate' => $this->migrate,
             'status' => $this->status->value,
             'batch' => $this->batch,
             'message' => $this->message,

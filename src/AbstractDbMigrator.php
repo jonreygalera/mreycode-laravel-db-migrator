@@ -18,18 +18,19 @@ abstract class AbstractDbMigrator
     protected $cacheStats = true;
     protected $queueIndex = null;
     // This will identify whether to keep this migration on the stack as pending,
-    // even if there is no source data from the source app. This allows new data
-    // to be migrated from source to new later on.
+    // even if there is no source data from the db app. This allows new data
+    // to be migrated from db to new later on.
     protected $keepOnRunning = false;
     // Property to determine if migration should keep running until a certain totalSize is reached
     protected $keepOnUntilTotalSize = false;
-    protected $dbConnection = 'db_tests';
+    protected $dbConnection = 'flai';
 
     private static $sourceConnection = null;
     private $migrationOptions;
     private $batch = 1;
     private $currentClass;
     private $activeMigration;
+
     private $params;
 
     /**
@@ -50,8 +51,8 @@ abstract class AbstractDbMigrator
     {
         $this->loadOptions();
         
-        $connection = $this->dbConnection ?? config('db-migrator.source_connection', 'db');
-        self::$sourceConnection = DB::connection($connection);
+        $connection = $this->dbConnection;
+        self::$sourceConnection = blank($connection) ? null : DB::connection($connection);
 
         if(strtolower($this->groupName) === strtolower(DbMigratorCommand::GROUP_SPECIAL_KEYWORD)) {
             throw new RuntimeException("Group name cannot be set to the special keyword '" . DbMigratorCommand::GROUP_SPECIAL_KEYWORD . "' in a migrator.");
@@ -102,6 +103,8 @@ abstract class AbstractDbMigrator
             $this->markAsFailed($dbMigrator, $throwable->getMessage() . "\n" . $throwable->getTraceAsString());
             throw $throwable;
         }
+
+        $this->printMigrationStatus("Migration saved.");
     }
 
     public function shouldTerminate()
@@ -154,36 +157,40 @@ abstract class AbstractDbMigrator
 
     public function resume()
     {
-        $this->printMigrationStatus("Checking if we can resume...");
-        $activeMigration = $this->getActiveDbMigration();
-        if ($activeMigration) {
-            $this->printMigrationStatus("Active migration found with status: " . $activeMigration->status);
-            $this->markAsPending($activeMigration);
-            $this->printMigrationStatus("Status set to PENDING.");
-        } else {
-            $this->printMigrationStatus("No active migration found to resume.");
-        }
-        $this->displayMigrationProgress();
-    }
+        // Find the most recent migration for this migrator, regardless of current status
+        $lastMigration = DbMigratorModel::where('migrate', $this->currentClass)
+            ->orderByDesc('batch')
+            ->first();
 
-    public function migrate()
-    {
-        $this->printMigrationStatus("Starting migration...");
-        if (!$this->activeMigration) {
-            $this->markFirstBatchAsPending();
+        if ($lastMigration) {
+            $this->markAsPending($lastMigration);
+            $this->printMigrationStatus("Resumed migration batch {$lastMigration->batch}: status set to pending.");
+        } else {
+            $this->printMigrationStatus("No previous migration found to resume.");
         }
-        $this->run($this->getActiveDbMigration());
+    }
+    
+    public function migrate()
+    {   
+        $currentClass = static::class;
+        $datetime = now()->toDateTimeString();
+        $this->printMigrationStatus("[" . $datetime . "] Processing migration: {$currentClass}");
+        $this->createPendingMigration();
+        $this->printMigrationStatus("[" . $datetime . "] INFO  Queued migration: {$currentClass}");
     }
 
     /**
      * Print a reusable migration status message with called class.
      *
      * @param string $message
+     * @param string|null $color
      * @return void
      */
-    public function printMigrationStatus(string $message)
+    protected function printMigrationStatus(string $message): void
     {
-        echo "[" . now() . "] [" . $this->currentClass . "] " . $message . PHP_EOL;
+        $datetime = now()->toDateTimeString();
+        $plainMessage = "[" . get_called_class() . "][$datetime] {$message}\n";
+        print($plainMessage);
     }
 
     /**
@@ -191,9 +198,9 @@ abstract class AbstractDbMigrator
      *
      * @return bool
      */
-    public function shouldKeepOnRunning()
+    protected function shouldKeepOnRunning(): bool
     {
-        return $this->keepOnRunning;
+        return (bool) $this->keepOnRunning;
     }
 
     /**
@@ -201,22 +208,21 @@ abstract class AbstractDbMigrator
      *
      * @return bool
      */
-    public function shouldKeepOnUntilTotalSize()
+    protected function shouldKeepOnUntilTotalSize(): bool
     {
-        if(!$this->keepOnUntilTotalSize) return false;
+        if (!$this->keepOnUntilTotalSize) {
+            return false;
+        }
 
-        $stats = $this->getActualMigrationStats();
-        if($stats['migrated'] < $stats['total']) return true;
-
-        return false;
+        return $this->totalMigrated() < $this->totalSize();
     }
 
-    public function getMeta()
+    protected function getMeta()
     {
-        return ['options' => $this->migrationOptions];
+        return [ 'options' => $this->getOptions() ];
     }
 
-    public function getOptions()
+    protected function getOptions()
     {
         return $this->migrationOptions;
     }
@@ -226,40 +232,54 @@ abstract class AbstractDbMigrator
         return [];
     }
 
-    public function getSourceConnection()
+    public function getSourceConnetion()
     {
-        return self::$sourceConnection;
+        return static::$sourceConnection ?? null;
     }
 
     protected function transformSourceData()
     {
-        return [];
+        return $this->sourceData();
     }
 
-    protected function countSourceData($data = null)
+    protected function countSourceData($data = null): int
     {
-        if(is_array($data)) return count($data);
+        $data ??= $this->transformSourceData();
 
-        if($data instanceof \Illuminate\Support\Collection) return $data->count();
+        if (is_array($data)) {
+            return count($data);
+        }
 
-        if (is_null($data)) return 0;
+        // Check for Laravel/Eloquent Collection or Arrayable instances
+        if (is_object($data)) {
+            // If it's a Laravel Collection
+            if (method_exists($data, 'count')) {
+                return $data->count();
+            }
+            // If it can be converted to array
+            if (method_exists($data, 'toArray')) {
+                return count($data->toArray());
+            }
+        }
 
-        return 0;
+        // As fallback, try to cast and count
+        return is_countable($data) ? count($data) : 0;
     }
 
     public function markFirstBatchAsPending()
     {
-        $exist = DbMigratorModel::where('migrate', $this->currentClass)
+        $firstMigration = DbMigratorModel::where('migrate', $this->currentClass)
+            ->orderBy('batch', 'asc')
             ->first();
 
-        if (!$exist) {
-            DbMigratorModel::create([
-                'migrate' => $this->currentClass,
-                'status' => MigratorStatus::PENDING->value,
-                'batch' => 1,
-                'meta' => $this->getMeta(),
-            ]);
+        if ($firstMigration) {
+            $firstMigration->status = MigratorStatus::PENDING->value;
+            $firstMigration->meta = $this->getMeta();
+            $firstMigration->save();
+            return $firstMigration;
         }
+
+        return null;
     }
 
     public function markAsPending(DbMigratorModel $dbMigrator)
@@ -278,19 +298,22 @@ abstract class AbstractDbMigrator
 
     public function markAsPaused()
     {
-        $migration = $this->getActiveDbMigration();
-        if ($migration) {
-            $migration->status = MigratorStatus::PAUSED->value;
-            $migration->save();
-            $this->printMigrationStatus("Migration paused.");
-        } else {
-            $this->printMigrationStatus("No active migration to pause.");
+        $firstMigration = DbMigratorModel::where('migrate', $this->currentClass)
+            ->orderBy('id', 'desc')
+            ->first();
+
+        if ($firstMigration) {
+            $firstMigration->status = MigratorStatus::PAUSED->value;
+            $firstMigration->save();
+            return $firstMigration;
         }
+
+        return null;
     }
 
-    public function markAllAsRestart()
+    protected function markAllAsRestart()
     {
-        DbMigratorModel::where('migrate', $this->currentClass)
+        return DbMigratorModel::where('migrate', $this->currentClass)
             ->update(['status' => MigratorStatus::RESTART->value]);
     }
 
@@ -304,37 +327,140 @@ abstract class AbstractDbMigrator
 
     public function markAsFailed(DbMigratorModel $dbMigrator, $message)
     {
+        // Trim the message if it's too long (e.g., max 1024 chars)
+        $maxMsgLen = 1024;
+        $trimmedMsg = (is_string($message) && strlen($message) > $maxMsgLen)
+            ? substr($message, 0, $maxMsgLen) . '...'
+            : $message;
+
+        $dbMigrator->message = $trimmedMsg;
         $dbMigrator->status = MigratorStatus::FAILED->value;
-        $dbMigrator->message = $message;
+
         $dbMigrator->save();
         return $dbMigrator;
     }
 
-    private function displayMigrationProgress(bool $truth = false)
+    protected function createPendingMigration()
     {
-        $stats = $this->getActualMigrationStats($truth);
-        $total = $stats['total'];
-        $migrated = $stats['migrated'];
-        $percent = $total > 0 ? round(($migrated / $total) * 100, 2) : 0;
-        $memory = round(memory_get_usage() / 1024 / 1024, 2);
+        $existing = $this->activeMigration;
 
-        $statusSummary = $this->countStatus();
-        $statusStr = '';
-        foreach ($statusSummary as $status => $count) {
-            $statusStr .= "[$status: $count] ";
+        if($existing && in_array($existing?->status, $this->getActiveMigrationStatuses())) {
+            throw new RuntimeException(sprintf(
+                'Cannot create migration: found existing migration (status: %s, batch: %s) for [%s].',
+                $existing->status ?? 'unknown',
+                $existing->batch ?? 'n/a',
+                $this->currentClass
+            ));
         }
 
-        echo "\r[" . now() . "] [" . $this->currentClass . "] Progress: $percent% ($migrated/$total) | Status: $statusStr | Memory: {$memory}MB";
-        if($truth) echo PHP_EOL;
+        // Get the last successful batch using this class's method.
+        $lastSuccessBatch = $this->getLastBatchSuccessMigration();
+        $this->batch = ($lastSuccessBatch?->batch + 0) + 1;
+
+        $options = $lastSuccessBatch?->meta['options'] ?? [];
+        if (!is_array($options)) {
+            $options = [];
+        }
+        $this->migrationOptions = $this->buildOptions($options);
+     
+        $this->storeDbMigrations(
+            new DbMigratorDto(
+                $this->currentClass,
+                MigratorStatus::PENDING,
+                $this->batch,
+                meta: $this->getMeta()
+            )
+        );
     }
 
-    private function getActualMigrationStats(bool $truth = false)
+    protected function newPendingMigration($dbMigrator)
+    {
+        $this->batch = ($dbMigrator?->batch ?? 0) + 1;
+
+        $existingRetryDbMigration = $this->getFirstRestartMigration();
+
+        if($existingRetryDbMigration) {
+            $existingRetryDbMigration->status = MigratorStatus::PENDING->value;
+            $existingRetryDbMigration->meta = $this->getMeta();
+            $existingRetryDbMigration->save();
+        } else {
+            $this->storeDbMigrations(
+                new DbMigratorDto(
+                    $this->currentClass,
+                    MigratorStatus::PENDING,
+                    $this->batch,
+                    meta: $this->getMeta()
+                )
+            );
+        }
+    }
+
+    public function getFirstRestartMigration()
+    {
+        return DbMigratorModel::where('migrate', $this->currentClass)
+            ->where('status', MigratorStatus::RESTART->value)
+            ->orderBy('id', 'asc')
+            ->first();
+    }
+
+    /**
+     * Returns the total number of items available for migration.
+     * 
+     * By default, returns 0. Override in subclasses to provide accurate counts.
+     *
+     * @return int
+     */
+    protected function totalSize()
+    {
+        // NOTE: Subclasses should override this to return the actual db data size.
+        return 0;
+    }
+
+    /**
+     * Returns the actual number of successfully migrated items.
+     *
+     * By default, returns 0. Subclasses should override this for real logic.
+     *
+     * @return int
+     */
+    protected function actualMigrated()
+    {
+        // NOTE: Subclasses should override this to return how many items have been migrated.
+        return $this->countMigrated();
+    }
+
+    /**
+     * Returns the total number of items that have been migrated so far.
+     *
+     * By default, returns 0. Override in subclasses for actual progress tracking.
+     *
+     * @return int
+     */
+    protected function totalMigrated()
+    {
+        // NOTE: Subclasses should override this to return how many items have been migrated.
+        return DbMigratorModel::where('migrate', $this->currentClass)
+            ->where('status', MigratorStatus::SUCCESS->value)
+            ->sum('total_migrated');
+    }
+
+    public function getMigrationStats(bool $truth = false)
     {
         $cacheKey = $this->getTotalMigratedCacheKey();
-        $migrationStats = function() {
+
+        $migrationStats = function () {
+            $totalSize = $this->totalSize();
+            $actualMigrated = $this->actualMigrated();
+            $totalMigrated = $this->totalMigrated();
+            $remaining = $totalSize - ($actualMigrated == 0 ? $totalMigrated : $actualMigrated);
+            $statusCounts = $this->countStatus();
+
             return [
-                'total' => $this->totalSize(),
-                'migrated' => $this->actualMigrated(),
+                'total_size' => $totalSize,
+                'actual_migrated' => $actualMigrated,
+                'total_migrated' => $totalMigrated,
+                'remaining' => $remaining,
+                'status_counts' => $statusCounts,
             ];
         };
 
@@ -353,93 +479,113 @@ abstract class AbstractDbMigrator
         return $this->groupName;
     }
 
-    public function getDescription()
+    protected function throwIfCountMismatch($sourceDataCount)
+    {
+        // If a closure is provided, execute it to get the stored count for comparison
+        $storedCount = $this->getStoredData();
+
+        // Only check if $storedCount is set and is numeric
+        if ($storedCount !== null && is_numeric($storedCount)) {
+            if ($sourceDataCount !== $storedCount) {
+                $errorMessage = "Migration count mismatch: source data count ({$sourceDataCount}) does not match stored count ({$storedCount})";
+                $this->findUnsavedData($errorMessage);
+                throw new RuntimeException($errorMessage);
+            }
+        }
+    }
+
+
+    protected function findUnsavedData($message)
     {
         return null;
     }
 
-    protected function totalSize()
+    protected function getParams()
     {
-        return 0;
+        return $this->params;
     }
 
-    protected function actualMigrated()
+    protected function getStoredData()
     {
-        return 0;
+        return null;
     }
 
-    protected function storeDbMigrations(collect $sourceData, string $sourcePk, string $destPk)
+    protected function onRestart(): bool
     {
-        $totalSize = $sourceData->count();
-        $this->printMigrationStatus("Storing $totalSize migration records.");
-        // Implement logic to map and store individual records if needed.
+        return true;
     }
 
-    private function buildHandleParams()
+ 
+    private function storeDbMigrations(?DbMigratorDto $dbMigratorDto)
     {
-        $sourceData = $this->sourceData();
-        $size = $this->countSourceData($sourceData);
-
-        return collect([
-            'sourceData' => $sourceData,
-            'size' => $size,
-        ]);
-    }
-
-    public function getActiveDbMigration()
-    {
-        return DbMigratorModel::where('migrate', $this->currentClass)
-            ->whereIn('status', $this->getActiveMigrationStatuses())
-            ->first();
-    }
-
-    public function getLastBatchSuccessMigration()
-    {
-        return DbMigratorModel::where('migrate', $this->currentClass)
-            ->where('status', MigratorStatus::SUCCESS->value)
-            ->orderBy('batch', 'desc')
-            ->first();
-    }
-
-    public function getActiveMigrationStatuses()
-    {
-        return [
-            MigratorStatus::PENDING->value,
-            MigratorStatus::ONGOING->value,
+        $payload = $dbMigratorDto->toArray();
+        $migrationIdentifier = [
+            'migrate' => $payload['migrate'],
+            'batch' => $payload['batch']
         ];
-    }
 
-    protected function newPendingMigration(DbMigratorModel $dbMigrator)
-    {
-        $this->batch = ($dbMigrator->batch ?? 0) + 1;
-
-        $existingRetryMigration = $this->getFirstRestartMigration();
-
-        if($existingRetryMigration) {
-            $existingRetryMigration->status = MigratorStatus::PENDING->value;
-            $existingRetryMigration->meta = $this->getMeta();
-            $existingRetryMigration->save();
-        } else {
-            DbMigratorModel::create([
-                'migrate' => $this->currentClass,
-                'status' => MigratorStatus::PENDING->value,
-                'batch' => $this->batch,
-                'meta' => $this->getMeta(),
-            ]);
+        if ($dbMigratorDto?->id) {
+            $migrationIdentifier['id'] = $dbMigratorDto->id;
         }
-    }
 
-    private function getFirstRestartMigration()
-    {
-        return DbMigratorModel::where('migrate', $this->currentClass)
-            ->where('status', MigratorStatus::RESTART->value)
-            ->orderBy('batch', 'asc')
-            ->first();
+        return DbMigratorModel::updateOrCreate(
+            $migrationIdentifier,
+            $payload
+        );
     }
 
     private function getTotalMigratedCacheKey()
     {
-        return 'db-migrator:stats:' . $this->currentClass;
+        return 'db_migrated_total:' . $this->currentClass;
+    }
+
+    private function displayMigrationProgress(bool $truth = false)
+    {
+        printf("\n%-18s: %s\n%-18s: %s\n", "Migration Class", get_class($this), "Report Date", date('Y-m-d H:i:s'));
+        $stats = $this->getMigrationStats($truth);
+
+        $divider = str_repeat('-', 39) . "\n";
+        print($divider);
+        print("STATS\n");
+        print($divider);
+
+        printf(
+            "Recorded Migrated : %d\nActual Migrated   : %d\nTotal             : %d\nRemaining         : %d\n",
+            $stats['total_migrated'],
+            $stats['actual_migrated'],
+            $stats['total_size'],
+            $stats['remaining']
+        );
+
+        // Show memory usage
+        $memUsage = memory_get_usage(true);
+        $memPeak = memory_get_peak_usage(true);
+
+        // Inline function to format bytes to human-readable string
+        $formatBytes = function ($bytes) {
+            if ($bytes < 1024) {
+                return $bytes . ' B';
+            }
+            $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+            $exp = (int) (log($bytes) / log(1024));
+            return round($bytes / (1024 ** $exp), 2) . ' ' . $units[$exp];
+        };
+
+        printf("\nMemory Usage      : %s\nMemory Peak       : %s\n",
+            $formatBytes($memUsage),
+            $formatBytes($memPeak)
+        );
+
+        print($divider);
+        print("STATUS\n");
+        print($divider);
+
+        foreach ($stats['status_counts'] as $status => $count) {
+            printf("%-14s: %d\n", ucfirst($status), $count);
+        }
+
+        print($divider);
+        print("Note: These numbers may not be perfectly precise due to differences in migration logic, caches, or source data updates.\n");
     }
 
     private function loadOptions()
@@ -456,9 +602,54 @@ abstract class AbstractDbMigrator
         $params = $this->params = $this->buildHandleParams();
         if($params['size'] > 0 || $this->shouldKeepOnUntilTotalSize()) {
             $this->handle($params);
+            $this->throwIfCountMismatch($params['size'] ?? 0);
             $this->migrationOptions = $this->buildOptions($meta['options']);
         }
 
         return $params;
     }
+
+    /**
+     * Build data to be passed into the handle() method as params.
+     * You may override this in subclasses for custom behavior.
+     */
+    private function buildHandleParams()
+    {
+        $sourceData = $this->transformSourceData();
+        return collect([ 
+            'sourceData' => $sourceData,
+            'size' => $this->countSourceData($sourceData)
+        ]);
+    }
+
+    private function getActiveDbMigration()
+    {
+        return DbMigratorModel::where('migrate', $this->currentClass)
+            ->whereIn('status', $this->getActiveMigrationStatuses())
+            ->orderByDesc('batch')
+            ->first();
+    }
+
+    private function getLastBatchSuccessMigration()
+    {
+        return DbMigratorModel::where('migrate', $this->currentClass)
+            ->where('status', MigratorStatus::SUCCESS->value)
+            ->orderByDesc('batch')
+            ->first();
+    }
+
+    /**
+     * Get all statuses that represent a migration still pending resolution.
+     *
+     * @return array
+     */
+    private function getActiveMigrationStatuses(): array
+    {
+        return [
+            MigratorStatus::PENDING->value,
+            MigratorStatus::ONGOING->value,
+            MigratorStatus::FAILED->value,
+        ];
+    }
+
 }
