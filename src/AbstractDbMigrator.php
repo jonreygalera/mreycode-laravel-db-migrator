@@ -466,7 +466,7 @@ abstract class AbstractDbMigrator
 
         if(!$this->cacheStats || $truth) return $migrationStats();
 
-        return cache()->remember($cacheKey, DbMigratorCommand::WATCHER_INTERVAL, callback: $migrationStats);
+        return cache()->remember($cacheKey, config('db-migrator.monitoring.interval', DbMigratorCommand::WATCHER_INTERVAL), callback: $migrationStats);
     }
 
     public function getQueueIndex()
