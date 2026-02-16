@@ -2,7 +2,6 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/mreycode/laravel-db-migrator.svg?style=flat-square)](https://packagist.org/packages/mreycode/laravel-db-migrator)
 [![Total Downloads](https://img.shields.io/packagist/dt/mreycode/laravel-db-migrator.svg?style=flat-square)](https://packagist.org/packages/mreycode/laravel-db-migrator)
-[![License](https://img.shields.io/packagist/l/mreycode/laravel-db-migrator.svg?style=flat-square)](https://packagist.org/packages/mreycode/laravel-db-migrator)
 [![PHP Version](https://img.shields.io/packagist/php-v/mreycode/laravel-db-migrator.svg?style=flat-square)](https://packagist.org/packages/mreycode/laravel-db-migrator)
 
 **Laravel Db Migrator** is a high-performance, production-grade framework designed for complex, high-volume database migrations. It transforms the often-chaotic process of data ETL (Extract, Transform, Load) into a manageable, monitored, and resumable workflow.
@@ -163,13 +162,13 @@ php artisan mreycode:db-worker --max-jobs=500 --memory=1024
 
 ## ⚙️ Configuration Reference (`db-migrator.php`)
 
-| Key                   | Default   | Description                                                                  |
-| :-------------------- | :-------- | :--------------------------------------------------------------------------- |
-| `sequence`            | `[]`      | Critical: Defines the order of execution to satisfy foreign key constraints. |
-| `monitoring.interval` | `30`      | Seconds between refreshes for the continuous stats watcher.                  |
-| `worker.delay`        | `5`       | Seconds to wait between job dispatches.                                      |
-| `worker.sleep`        | `3`       | Seconds to sleep when no pending migrations are found.                       |
-| `tables`              | `[...]`   | Customize the table names used for tracking and history.                     |
+| Key                   | Default | Description                                                                  |
+| :-------------------- | :------ | :--------------------------------------------------------------------------- |
+| `sequence`            | `[]`    | Critical: Defines the order of execution to satisfy foreign key constraints. |
+| `monitoring.interval` | `30`    | Seconds between refreshes for the continuous stats watcher.                  |
+| `worker.delay`        | `5`     | Seconds to wait between job dispatches.                                      |
+| `worker.sleep`        | `3`     | Seconds to sleep when no pending migrations are found.                       |
+| `tables`              | `[...]` | Customize the table names used for tracking and history.                     |
 
 ---
 
