@@ -1,0 +1,38 @@
+<?php
+
+namespace DummyNamespace;
+
+use Mreycode\DbMigrator\AbstractDbMigrator;
+use Illuminate\Support\Facades\DB;
+
+class DummyClass extends AbstractDbMigrator
+{
+    /**
+     * Fetch and prepare data to migrate from the source.
+     */
+    public function sourceData()
+    {
+        return collect([]);
+    }
+
+    /**
+     * Perform the migration using the source data.
+     */
+    public function handle($params = null)
+    {
+
+    }
+
+    /**
+     * Build options such as offset and limit for batching.
+     */
+    protected function buildOptions($params = [])
+    {
+        $offset = isset($params['offset']) ? ($params['offset'] + $params['limit']) : 0;
+        $limit = $params['limit'] ?? 500;
+        return [
+            'offset' => $offset,
+            'limit' => $limit
+        ];
+    }
+}
