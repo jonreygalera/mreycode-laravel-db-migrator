@@ -23,7 +23,7 @@ abstract class AbstractDbMigrator
     protected $keepOnRunning = false;
     // Property to determine if migration should keep running until a certain totalSize is reached
     protected $keepOnUntilTotalSize = false;
-    protected $dbConnection = 'flai';
+    protected $dbConnection = null;
 
     private static $sourceConnection = null;
     private $migrationOptions;
