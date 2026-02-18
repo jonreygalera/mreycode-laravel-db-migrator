@@ -144,6 +144,7 @@ abstract class AbstractDbMigrator
     public function restart()
     {
         $this->printMigrationStatus("Restarting all migrations for this class...");
+        $this->onRestart();
         $this->markAllAsRestart();
         $this->markFirstBatchAsPending();
         $this->displayMigrationProgress();
