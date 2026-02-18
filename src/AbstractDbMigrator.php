@@ -601,6 +601,7 @@ abstract class AbstractDbMigrator
         $this->migrationOptions = $meta['options'];
         $params = $this->params = $this->buildHandleParams();
         if($params['size'] > 0 || $this->shouldKeepOnUntilTotalSize()) {
+            $params['mappedSourceData'] = $this->recordMigrationMapping($params['sourceData']);
             $this->handle($params);
             $this->throwIfCountMismatch($params['size'] ?? 0);
             $this->migrationOptions = $this->buildOptions($meta['options']);

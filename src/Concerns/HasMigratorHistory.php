@@ -10,18 +10,28 @@ trait HasMigratorHistory
 {
     public $migratorSourceName = null;
     public $dbMigratorName = null;
-    
-    public function recordMigrationMapping(Collection|array $sourceData, $sourceId, $targetId = 'id')
+    public $migratorSourceId = 'source_id';
+    public $migratorTargetId = 'id';
+    public bool $recordMigratorHistory = false;
+
+    public function recordMigrationMapping($sourceData)
     {
+        if(!$this->recordMigratorHistory) return collect([]);
+
+        $sourceId = $this->migratorSourceId;
+        $targetId = $this->migratorTargetId;
+        
+        $sourceData = collect($sourceData);
+
         $sourceName = $this->getMigratorSourceName();
         $migratorName = $this->getMigratorName();
 
-        $forMigrationDb = collect($sourceData)->map(function($item) use($sourceName, $migratorName, $sourceId, $targetId) {
+        $forMigrationDb = $sourceData->map(function($item) use($sourceName, $migratorName, $sourceId, $targetId) {
             return [
                 'id' => Str::uuid(),
                 'source_name' => $sourceName,
-                'source_id' => $item[$sourceId],
-                'target_id' => $item[$targetId],
+                'source_id' => $item->{$sourceId} ?? $item[$sourceId],
+                'target_id' => $item->{$targetId} ?? $item[$targetId],
                 'migrator_name' => $migratorName,
             ];
         });
