@@ -76,6 +76,15 @@ use App\Models\User;
 
 class UserMigrator extends AbstractDbMigrator
 {
+    /** @var string The column name representing the unique ID in the source data */
+    public $migratorSourceId = 'source_id';
+
+    /** @var string The column name representing the unique ID in the target table */
+    public $migratorTargetId = 'id';
+
+    /** @var bool Set to true to store the source-to-target ID mapping in the history table */
+    public bool $recordMigratorHistory = false;
+
     /**
      * Define the data to be migrated in this batch.
      * Uses the 'source_connection' defined in config or $dbConnection property.
