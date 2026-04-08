@@ -25,7 +25,8 @@ class DbMigrator extends Command
         {--i|interactive : Show list of migration classes and select by index}
         {--g|group= : The migration group to run (e.g., users, posts), default is none}
         {--L|last-run : Show the last migrated class}
-        {--p|pause : Pause an ongoing migration}'
+        {--p|pause : Pause an ongoing migration}
+        {--D|dry-run : Only simulate migrations without committing changes}'
     ;
 
     /**
@@ -318,6 +319,10 @@ class DbMigrator extends Command
 
     protected function handleMigratorAction($migrator, $action)
     {
+        if ($this->option('dry-run')) {
+            $migrator->setDryRun(true);
+        }
+
         switch ($action) {
             case MigratorActions::STATS->value :
                 $this->showStatsAction($migrator);
@@ -371,6 +376,21 @@ class DbMigrator extends Command
 
     protected function migrateAction($migrator)
     {
+        if ($this->option('dry-run')) {
+            $this->info("Running dry-run simulation for " . get_class($migrator));
+            
+            // For dry run, we execute synchronously for immediate feedback
+            $dbMigrator = new DbMigratorModel([
+                'migrate' => get_class($migrator),
+                'status' => MigratorStatus::PENDING->value,
+                'batch' => 0,
+                'meta' => ['options' => $migrator->getOptions()]
+            ]);
+
+            $migrator->run($dbMigrator);
+            return;
+        }
+
         $migrator->migrate();
     }
 

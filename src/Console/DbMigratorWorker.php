@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Mreycode\DbMigrator\Enums\MigratorStatus;
 use Mreycode\DbMigrator\Jobs\DbMigratorJob;
 use Mreycode\DbMigrator\Models\DbMigrator as DbMigratorModel;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class DbMigratorWorker extends Command
@@ -107,16 +108,17 @@ class DbMigratorWorker extends Command
     
     protected function fetchAndMarkPendingMigration()
     {
-        $exist = DbMigratorModel::where('status', MigratorStatus::PENDING->value)
-            ->first();
-        
-        if ($exist) {
-            $exist->status = MigratorStatus::ONGOING->value;
-            $exist->save();
+        return DB::transaction(function () {
+            $exist = DbMigratorModel::where('status', MigratorStatus::PENDING->value)
+                ->lockForUpdate()
+                ->first();
+
+            if ($exist) {
+                $exist->status = MigratorStatus::ONGOING->value;
+                $exist->save();
+            }
 
             return $exist;
-        }
-
-        return $exist;
+        });
     }
 }

@@ -24,8 +24,9 @@ abstract class AbstractDbMigrator
     // Property to determine if migration should keep running until a certain totalSize is reached
     protected $keepOnUntilTotalSize = false;
     protected $dbConnection = null;
+    protected bool $dryRun = false;
 
-    private static $sourceConnection = null;
+    protected $sourceConnection = null;
     private $migrationOptions;
     private $batch = 1;
     private $currentClass;
@@ -52,7 +53,7 @@ abstract class AbstractDbMigrator
         $this->loadOptions();
         
         $connection = $this->dbConnection;
-        self::$sourceConnection = blank($connection) ? null : DB::connection($connection);
+        $this->sourceConnection = blank($connection) ? null : DB::connection($connection);
 
         if(strtolower($this->groupName) === strtolower(DbMigratorCommand::GROUP_SPECIAL_KEYWORD)) {
             throw new RuntimeException("Group name cannot be set to the special keyword '" . DbMigratorCommand::GROUP_SPECIAL_KEYWORD . "' in a migrator.");
@@ -67,19 +68,27 @@ abstract class AbstractDbMigrator
      */
     public function run(DbMigratorModel $dbMigrator)
     {
+        $this->activeMigration = $dbMigrator;
         try {
             DB::beginTransaction();
-            $this->printMigrationStatus("Migration started.");
+
+            if ($this->dryRun) {
+                $this->printMigrationStatus("Simulation started (Dry Run). No changes will be saved.");
+            }
+
+            $this->beforeMigrate();
 
             $result = $this->process($dbMigrator);
 
-            if($result['size'] == 0 && $this->shouldKeepOnUntilTotalSize()) {
+            $this->afterMigrate();
+
+            if ($result['size'] == 0 && $this->shouldKeepOnUntilTotalSize()) {
                 $this->markAsSuccess($dbMigrator, $result->toArray());
                 $this->newPendingMigration($dbMigrator);
                 $this->printMigrationStatus("No data to migrate, new pending migration.");
             } else {
-                if($result['size'] == 0) {
-                    if($this->shouldKeepOnRunning()) {
+                if ($result['size'] == 0) {
+                    if ($this->shouldKeepOnRunning()) {
                         $dbMigrator->status = MigratorStatus::PENDING->value;
                         $dbMigrator->save();
                         $this->printMigrationStatus("No data to migrate, keeping migration pending.");
@@ -94,17 +103,24 @@ abstract class AbstractDbMigrator
                 }
             }
 
-            DB::commit();
+            if ($this->dryRun) {
+                DB::rollBack();
+                $this->printMigrationStatus("Simulation completed (Dry Run). No changes were saved.");
+            } else {
+                DB::commit();
+                $this->printMigrationStatus("Migration saved.");
+            }
         } catch (Throwable $throwable) {
             DB::rollBack();
             $this->printMigrationStatus("Migration error: " . $throwable->getMessage());
             $this->printMigrationStatus("Trace: " . $throwable->getTraceAsString());
 
-            $this->markAsFailed($dbMigrator, $throwable->getMessage() . "\n" . $throwable->getTraceAsString());
+            if (!$this->dryRun) {
+                $this->markAsFailed($dbMigrator, $throwable->getMessage() . "\n" . $throwable->getTraceAsString());
+            }
+
             throw $throwable;
         }
-
-        $this->printMigrationStatus("Migration saved.");
     }
 
     public function shouldTerminate()
@@ -190,8 +206,54 @@ abstract class AbstractDbMigrator
     protected function printMigrationStatus(string $message): void
     {
         $datetime = now()->toDateTimeString();
-        $plainMessage = "[" . get_called_class() . "][$datetime] {$message}\n";
-        print($plainMessage);
+        $plainMessage = "[" . get_called_class() . "][$datetime] {$message}";
+        $this->log($plainMessage);
+    }
+
+    /**
+     * Internal logging method that can be overridden to use Laravel Log facade or other loggers.
+     *
+     * @param string $message
+     * @return void
+     */
+    protected function log(string $message): void
+    {
+        // For now, we print to console. In the future, this could be integrated with Laravel Log.
+        print($message . "\n");
+    }
+
+    /**
+     * Hook that runs before the migration starts.
+     *
+     * @return void
+     */
+    protected function beforeMigrate(): void
+    {
+        //
+    }
+
+    /**
+     * Hook that runs after the migration finishes.
+     *
+     * @return void
+     */
+    protected function afterMigrate(): void
+    {
+        //
+    }
+
+    /**
+     * Paginate source data based on the current batch number.
+     * This is useful for large datasets where you want to process in small chunks.
+     *
+     * @param \Illuminate\Database\Query\Builder|\Illuminate\Database\Eloquent\Builder $query
+     * @param int $perPage
+     * @return \Illuminate\Support\Collection
+     */
+    protected function paginateSourceData($query, int $perPage = 1000)
+    {
+        $batch = ($this->activeMigration?->batch ?? 1) - 1;
+        return $query->offset($batch * $perPage)->limit($perPage)->get();
     }
 
     /**
@@ -235,7 +297,7 @@ abstract class AbstractDbMigrator
 
     public function getSourceConnection()
     {
-        return static::$sourceConnection ?? null;
+        return $this->sourceConnection ?? null;
     }
 
     protected function transformSourceData()
@@ -300,7 +362,7 @@ abstract class AbstractDbMigrator
     public function markAsPaused()
     {
         $firstMigration = DbMigratorModel::where('migrate', $this->currentClass)
-            ->orderBy('id', 'desc')
+            ->orderBy('batch', 'desc')
             ->first();
 
         if ($firstMigration) {
