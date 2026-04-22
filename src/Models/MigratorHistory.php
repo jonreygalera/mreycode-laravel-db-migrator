@@ -13,7 +13,7 @@ class MigratorHistory extends Model
         'source_name',
         'source_id',
         'target_id',
-        'migration_name',
+        'migrator_name',
         'meta',
     ];
 
@@ -25,7 +25,7 @@ class MigratorHistory extends Model
     {
         parent::__construct($attributes);
 
-        $this->table = config('db-migrator.tables.migrator_histories', 'migrator_histories');
+        $this->table = config('db-migrator.tables.migrator_history', 'migrator_histories');
     }
 
     protected static function booted()

@@ -12,31 +12,37 @@ return new class extends Migration
     public function up(): void
     {
 
-        $tableNames = config('db-migrator.tables');
-        throw_if(empty($tableNames), new Exception('Error: config/db-migrator.php not loaded. Run [php artisan config:clear] and try again.'));
+        $tableNames = config('db-migrator.tables', []);
+        $dbMigratorTable = $tableNames['db_migrator'] ?? $tableNames['db_migrators'] ?? 'db_migrators';
+        $historyTable = $tableNames['migrator_history'] ?? $tableNames['migrator_histories'] ?? 'migrator_histories';
 
-        
-        Schema::create($tableNames['db_migrators'], function (Blueprint $table) {
+        Schema::create($dbMigratorTable, function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->string('migrate')->index();
-            $table->string('status')->index();
-            $table->integer('batch')->default(1)->index();
+            $table->string('migrate');
+            $table->string('status');
+            $table->integer('batch')->default(1);
             $table->integer('total_migrated')->nullable()->comment('Total number of records migrated upon success only.');
             $table->text('message')->nullable()->comment('Optional message info for this migration. May be long.');
             $table->json('meta')->nullable();
             $table->timestamps();
+
+            // Optimized for common query patterns
+            $table->index(['migrate', 'status'], 'db_migrators_migrate_status_index');
+            $table->index(['migrate', 'batch'], 'db_migrators_migrate_batch_index');
+            $table->index('created_at');
         });
 
-        Schema::create($tableNames['migrator_histories'], function (Blueprint $table) {
+        Schema::create($historyTable, function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('source_name');
             $table->bigInteger('source_id');
             $table->bigInteger('target_id')->nullable()->index();
-            $table->string('migrator_name')->index();
+            $table->string('migrator_name');
             $table->json('meta')->nullable();
             $table->timestamps();
 
-            $table->unique(['source_name', 'source_id', 'migrator_name'], 'mreycode_md_unique');
+            $table->unique(['source_name', 'migrator_name', 'source_id'], 'migrator_histories_unique');
+            $table->index('created_at');
         });
     }
 
@@ -45,7 +51,13 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('db_migrator');
-        Schema::dropIfExists('migration_history');
+        $tableNames = config('db-migrator.tables', []);
+        $dbMigratorTable = $tableNames['db_migrator'] ?? $tableNames['db_migrators'] ?? 'db_migrators';
+        $historyTable = $tableNames['migrator_history'] ?? $tableNames['migrator_histories'] ?? 'migrator_histories';
+        
+        if ($tableNames) {
+            Schema::dropIfExists($historyTable);
+            Schema::dropIfExists($dbMigratorTable);
+        }
     }
 };
