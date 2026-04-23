@@ -26,7 +26,10 @@ class DbMigrator extends Command
         {--g|group= : The migration group to run (e.g., users, posts), default is none}
         {--L|last-run : Show the last migrated class}
         {--p|pause : Pause an ongoing migration}
-        {--D|dry-run : Only simulate migrations without committing changes}'
+        {--D|dry-run : Only simulate migrations without committing changes}
+        {--l|list : Display all available batches for execution}
+        {--info : check batch info}
+        {batch? : The batch to execute before continuing to the next sequence.}'
     ;
 
     /**
@@ -46,6 +49,7 @@ class DbMigrator extends Command
             return;
         }
 
+        $listOption = $this->option('list');
         $groupOption = $this->option('group');
         $classOption = $this->option('class');
         $interactiveOption = $this->option('interactive');
@@ -333,6 +337,12 @@ class DbMigrator extends Command
             case MigratorActions::RESUME->value:
                 $this->resumeAction($migrator);
                 break;
+            case MigratorActions::LIST->value:
+                $this->listAction($migrator);
+                break;
+            case MigratorActions::INFO->value:
+                $this->infoAction($migrator);
+                break;
             case MigratorActions::PAUSE->value:
                 $this->pauseAction($migrator);
                 break;
@@ -358,7 +368,7 @@ class DbMigrator extends Command
 
     protected function restartAction($migrator)
     {
-        $count = $migrator->restart();
+        $count = $migrator->restart($this->argument('batch'));
         $this->comment("Restarting migration... ({$count} rows affected)");
     }
 
@@ -372,6 +382,18 @@ class DbMigrator extends Command
     {
         $this->info('Pausing migration...');
         $migrator->pause();
+    }
+
+    protected function listAction($migrator)
+    {
+        $this->info('Bacth list...');
+        $migrator->showBatchList();
+    }
+
+    protected function infoAction($migrator)
+    {
+        $this->info('Resuming migration...');
+        $migrator->showBatchInfo($this->argument('batch'));
     }
 
     protected function migrateAction($migrator)
@@ -401,6 +423,8 @@ class DbMigrator extends Command
             MigratorActions::STATS->value => 'Show Migration Stats',
             MigratorActions::RESTART->value => 'Restart Migration',
             MigratorActions::RESUME->value => 'Resume Migration',
+            MigratorActions::LIST->value => 'Show all the of Batches in Migration',
+            MigratorActions::INFO->value => 'Show the information of specified batch',
             MigratorActions::PAUSE->value => 'Pause Migration',
             MigratorActions::CONTINUES_STATS->value => 'Continuously Show Stats',
             MigratorActions::EXIT->value => 'Exit'

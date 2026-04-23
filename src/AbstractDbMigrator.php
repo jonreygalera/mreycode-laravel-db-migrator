@@ -2,6 +2,8 @@
 
 namespace Mreycode\DbMigrator;
 
+use App\Enums\StatusFields;
+use Exception;
 use Mreycode\DbMigrator\Console\DbMigrator as DbMigratorCommand;
 use Illuminate\Support\Facades\DB;
 use Mreycode\DbMigrator\Enums\MigratorStatus;
@@ -157,14 +159,63 @@ abstract class AbstractDbMigrator
         return array_merge(array_fill_keys(array_map(fn($s) => $s->value, MigratorStatus::cases()), 0), $stats);
     }
 
-    public function restart()
+    public function restart($batch = null)
     {
+        if(!blank($batch)) {
+            return $this->restartByBatch($batch);
+        }
         $this->printMigrationStatus("Restarting all migrations for this class...");
         $this->onRestart();
         $this->markAllAsRestart();
         $this->markFirstBatchAsPending();
         $this->displayMigrationProgress();
         return 1;
+    }
+
+    public function restartByBatch($batch)
+    {
+        $firstMigration = DbMigratorModel::where('migrate', $this->currentClass)
+                ->where('batch', $batch)
+                ->first();
+
+        if(!$firstMigration->first()) throw new Exception("Batch {$batch} not found.");
+        
+        DbMigratorModel::where('migrate', $this->currentClass)
+            ->where('batch', '>=', $batch)
+            ->update(['status' => MigratorStatus::RESTART->value]);
+
+        $firstMigration->status = MigratorStatus::PENDING->value;
+        $firstMigration->meta = $this->getMeta();
+        $firstMigration->save();
+        return 1;
+    }
+
+    public function showBatchList()
+    {
+        DbMigratorModel::where('migrate', $this->currentClass)
+            ->orderByDesc('batch')
+            ->get()
+            ->chunk(100)
+            ->map(function($batches) {
+                $batches->map(function($batch) {
+                    print_r("------\n");
+                    print_r("Batch: {$batch->batch}\n");
+                    print_r("Status:{$batch->status}\n");
+                    print_r($batch->meta);
+                });
+            });
+    }
+
+    public function showBatchInfo($batch)
+    {
+        $batchModel = DbMigratorModel::where('migrate', $this->currentClass)
+            ->where('batch', $batch)
+            ->first();
+        if(!$batchModel) throw new Exception("Batch {$batch} not found.");
+        print_r("------\n");
+        print_r("Batch: {$batchModel->batch}\n");
+        print_r("Status:{$batchModel->status}\n");
+        print_r($batchModel->meta);
     }
 
     public function pause()
@@ -186,7 +237,7 @@ abstract class AbstractDbMigrator
             $this->printMigrationStatus("No previous migration found to resume.");
         }
     }
-    
+
     public function migrate()
     {   
         $currentClass = static::class;
