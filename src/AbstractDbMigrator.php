@@ -185,7 +185,6 @@ abstract class AbstractDbMigrator
             ->update(['status' => MigratorStatus::RESTART->value]);
 
         $firstMigration->status = MigratorStatus::PENDING->value;
-        $firstMigration->meta = $this->getMeta();
         $firstMigration->save();
         return 1;
     }
