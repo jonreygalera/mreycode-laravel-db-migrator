@@ -37,4 +37,9 @@ class DbMigrator extends Model
             }
         });
     }
+
+    public function getConnectionName()
+    {
+        return config('db-migrator.model_connection', config('database.default')); 
+    }
 }

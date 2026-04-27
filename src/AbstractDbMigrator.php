@@ -71,8 +71,9 @@ abstract class AbstractDbMigrator
     public function run(DbMigratorModel $dbMigrator)
     {
         $this->activeMigration = $dbMigrator;
+        $dbConnection = $this->getDbConnection();
         try {
-            DB::beginTransaction();
+            $dbConnection->beginTransaction();
 
             if ($this->dryRun) {
                 $this->printMigrationStatus("Simulation started (Dry Run). No changes will be saved.");
@@ -106,14 +107,14 @@ abstract class AbstractDbMigrator
             }
 
             if ($this->dryRun) {
-                DB::rollBack();
+                $dbConnection->rollBack();
                 $this->printMigrationStatus("Simulation completed (Dry Run). No changes were saved.");
             } else {
-                DB::commit();
+                $dbConnection->commit();
                 $this->printMigrationStatus("Migration saved.");
             }
         } catch (Throwable $throwable) {
-            DB::rollBack();
+            $dbConnection->rollBack();
             $this->printMigrationStatus("Migration error: " . $throwable->getMessage());
             $this->printMigrationStatus("Trace: " . $throwable->getTraceAsString());
 
@@ -766,4 +767,18 @@ abstract class AbstractDbMigrator
         ];
     }
 
+    public function getModelConnectionName()
+    {
+        return config('db-migrator.model_connection', config('database.default')); 
+    }
+
+    public function getModel($model)
+    {
+        return (new $model)->setConnection($this->getModelConnectionName());
+    }
+
+    public function getDbConnection()
+    {
+        return DB::connection($this->getModelConnectionName());
+    }
 }

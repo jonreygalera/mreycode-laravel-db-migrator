@@ -46,5 +46,7 @@ return [
     'worker' => [
         'delay' => 5,
         'sleep' => 3,
-    ]
+    ],
+
+    'model_connection' => null
 ];
