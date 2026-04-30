@@ -72,25 +72,26 @@ abstract class AbstractDbMigrator
     {
         $this->activeMigration = $dbMigrator;
         $dbConnection = $this->getDbConnection();
+        $size = 0;
         try {
             $dbConnection->beginTransaction();
 
             if ($this->dryRun) {
-                $this->printMigrationStatus("Simulation started (Dry Run). No changes will be saved.");
+                $this->printMigrationStatus("Batch {$dbMigrator->batch}: Simulation started (Dry Run). No changes will be saved.");
             }
 
             $this->beforeMigrate();
 
             $result = $this->process($dbMigrator);
-
+            $size = $result['size'] ?? 0;
             $this->afterMigrate();
 
-            if ($result['size'] == 0 && $this->shouldKeepOnUntilTotalSize()) {
+            if ($size == 0 && $this->shouldKeepOnUntilTotalSize()) {
                 $this->markAsSuccess($dbMigrator, $result->toArray());
                 $this->newPendingMigration($dbMigrator);
                 $this->printMigrationStatus("No data to migrate, new pending migration.");
             } else {
-                if ($result['size'] == 0) {
+                if ($size == 0) {
                     if ($this->shouldKeepOnRunning()) {
                         $dbMigrator->status = MigratorStatus::PENDING->value;
                         $dbMigrator->save();
@@ -102,21 +103,21 @@ abstract class AbstractDbMigrator
                 } else {
                     $this->markAsSuccess($dbMigrator, $result->toArray());
                     $this->newPendingMigration($dbMigrator);
-                    $this->printMigrationStatus("Migration succeeded.");
+                    $this->printMigrationStatus("Batch {$dbMigrator->batch}: Migration succeeded.");
                 }
             }
 
             if ($this->dryRun) {
                 $dbConnection->rollBack();
-                $this->printMigrationStatus("Simulation completed (Dry Run). No changes were saved.");
+                $this->printMigrationStatus("{$dbMigrator->batch}: Simulation completed (Dry Run). No changes were saved.");
             } else {
                 $dbConnection->commit();
-                $this->printMigrationStatus("Migration saved.");
+                $this->printMigrationStatus("Batch {$dbMigrator->batch}: Migration saved.");
             }
         } catch (Throwable $throwable) {
             $dbConnection->rollBack();
-            $this->printMigrationStatus("Migration error: " . $throwable->getMessage());
-            $this->printMigrationStatus("Trace: " . $throwable->getTraceAsString());
+            $this->printMigrationStatus("{$dbMigrator->batch}: Migration error: " . $throwable->getMessage());
+            $this->printMigrationStatus("{$dbMigrator->batch}: Trace: " . $throwable->getTraceAsString());
 
             if (!$this->dryRun) {
                 $this->markAsFailed($dbMigrator, $throwable->getMessage() . "\n" . $throwable->getTraceAsString());
@@ -593,16 +594,18 @@ abstract class AbstractDbMigrator
         return $this->groupName;
     }
 
-    protected function throwIfCountMismatch($sourceDataCount)
+    protected function throwIfCountMismatch($dbMigrator, $sourceDataCount)
     {
         // If a closure is provided, execute it to get the stored count for comparison
-        $storedCount = $this->getStoredData();
+        $storedCount = $this->countStoredData();
 
         // Only check if $storedCount is set and is numeric
         if ($storedCount !== null && is_numeric($storedCount)) {
             if ($sourceDataCount !== $storedCount) {
-                $errorMessage = "Migration count mismatch: source data count ({$sourceDataCount}) does not match stored count ({$storedCount})";
+                $errorMessage = "Batch {$dbMigrator->batch}: Migration count mismatch: source data count ({$sourceDataCount}) does not match stored count ({$storedCount})";
                 $this->findUnsavedData($errorMessage);
+                $this->markAsFailed($dbMigrator, $errorMessage);
+                if((strtolower(config("queue.default", ""))) === "sync") dd($errorMessage);
                 throw new RuntimeException($errorMessage);
             }
         }
@@ -619,7 +622,7 @@ abstract class AbstractDbMigrator
         return $this->params;
     }
 
-    protected function getStoredData()
+    protected function countStoredData()
     {
         return null;
     }
@@ -717,11 +720,16 @@ abstract class AbstractDbMigrator
         if($params['size'] > 0 || $this->shouldKeepOnUntilTotalSize()) {
             $params['mappedSourceData'] = $this->recordMigrationMapping($params['sourceData']);
             $this->handle($params);
-            $this->throwIfCountMismatch($params['size'] ?? 0);
+            $this->throwIfCountMismatch($dbMigrator, $params['size'] ?? 0);
             $this->migrationOptions = $this->buildOptions($meta['options']);
         }
 
         return $params;
+    }
+
+    protected function getSourceData()
+    {
+        return $this->params['sourceData'];
     }
 
     /**
