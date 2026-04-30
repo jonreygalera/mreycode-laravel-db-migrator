@@ -774,7 +774,7 @@ abstract class AbstractDbMigrator
 
     public function getModel($model)
     {
-        return (new $model)->setConnection($this->getModelConnectionName());
+        return $model::on($this->getModelConnectionName());
     }
 
     public function getDbConnection()
