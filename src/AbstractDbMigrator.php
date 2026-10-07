@@ -102,9 +102,14 @@ abstract class AbstractDbMigrator
                         $this->printMigrationStatus("No data to migrate.");
                     }
                 } else {
-                    $this->markAsSuccess($dbMigrator, $result->toArray());
-                    $this->newPendingMigration($dbMigrator);
-                    $this->printMigrationStatus("Batch {$dbMigrator->batch}: Migration succeeded.");
+                    if($this->shouldForceToDone()) {
+                        $this->markAsDone($dbMigrator);
+                        $this->printMigrationStatus("{$dbMigrator->batch}: Migration completed.");
+                    } else {
+                        $this->markAsSuccess($dbMigrator, $result->toArray());
+                        $this->newPendingMigration($dbMigrator);
+                        $this->printMigrationStatus("Batch {$dbMigrator->batch}: Migration succeeded.");
+                    }
                 }
             }
 
@@ -125,11 +130,6 @@ abstract class AbstractDbMigrator
             }
 
             throw $throwable;
-        } finally {
-            if($this->shouldForceToDone() && !$this->dryRun) {
-                $this->markAsDone($dbMigrator);
-                $this->printMigrationStatus("{$dbMigrator->batch}: Migration completed.");
-            }
         }
     }
 
