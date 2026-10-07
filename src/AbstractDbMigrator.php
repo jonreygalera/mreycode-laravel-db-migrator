@@ -16,6 +16,7 @@ abstract class AbstractDbMigrator
 {
     use HasMigratorHistory;
 
+    protected bool $forceToDone = false;
     protected $groupName = null;
     protected $cacheStats = true;
     protected $queueIndex = null;
@@ -124,6 +125,11 @@ abstract class AbstractDbMigrator
             }
 
             throw $throwable;
+        } finally {
+            if($this->shouldForceToDone() && !$this->dryRun) {
+                $this->markAsDone($dbMigrator);
+                $this->printMigrationStatus("{$dbMigrator->batch}: Migration completed.");
+            }
         }
     }
 
@@ -773,6 +779,11 @@ abstract class AbstractDbMigrator
             MigratorStatus::ONGOING->value,
             MigratorStatus::FAILED->value,
         ];
+    }
+
+    private function shouldForceToDone()
+    {
+        return $this->forceToDone;
     }
 
     public function getModelConnectionName()
